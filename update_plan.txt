@@ -1,0 +1,41 @@
+Update Plan for app.py to use global_air_quality_dataset.csv and enhance UI:
+
+1. Data Loading and Preprocessing:
+   - Change data loading function to read "global_air_quality_dataset.csv".
+   - Parse "timestamp" as datetime.
+   - Handle missing values.
+   - Extract features: temperature, humidity, pressure, NO2, O3, CO.
+   - Target: PM2.5.
+   - Add support for filtering data by selected countries and cities.
+   - Scale features using StandardScaler.
+
+2. Model Training:
+   - Update train_model function to train on filtered data for selected countries.
+   - Use RandomForestRegressor as before.
+   - Cache model training for performance.
+
+3. UI Updates:
+   - Sidebar: Allow multi-select for countries.
+   - Display selected countries' data and predictions.
+   - Show carbon emissions and PM2.5 predictions per country.
+   - Add graphs for carbon emissions trends:
+     - Year-wise
+     - Month-wise
+     - Day-wise
+   - Use Plotly for interactive graphs.
+   - Improve UI styling for uniqueness and user-friendliness.
+
+4. Prediction:
+   - Update prediction form to allow city-level input or country-level aggregation.
+   - Show predicted PM2.5 and estimated CO2 emissions.
+
+5. Additional:
+   - Add caching where appropriate.
+   - Ensure responsiveness and layout improvements.
+
+Next Steps:
+- Confirm plan with user.
+- Implement changes in app.py.
+- Test updated app.
+
+Please confirm if this plan is acceptable.
