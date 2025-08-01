@@ -1,5 +1,3 @@
-# 🌐 Global Air Quality Dashboard with XGBoost + Random Forest Ensemble
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,11 +9,9 @@ from sklearn.metrics import mean_squared_error, r2_score
 import plotly.express as px
 from datetime import datetime
 
-# 🚀 Constants
 CO2_PM25_FACTOR = 0.035
 CO2_CO_FACTOR = 10
 
-# 🎨 Color coding for PM2.5
 def pm25_color_code(pm25):
     if pm25 <= 50: return "green"
     elif pm25 <= 100: return "yellow"
@@ -24,7 +20,6 @@ def pm25_color_code(pm25):
     elif pm25 <= 300: return "purple"
     else: return "maroon"
 
-# 💨 CO₂ Estimation
 def estimate_co2(pm25, co):
     return pm25 * CO2_PM25_FACTOR + co * CO2_CO_FACTOR
 
@@ -33,36 +28,37 @@ def load_and_merge_data():
     df1 = pd.read_csv("air_quality_dataset.csv", parse_dates=['timestamp'], dayfirst=True)
     df2 = pd.read_csv("global_air_quality_dataset.csv", parse_dates=['timestamp'])
 
-    # Clean missing data with updated syntax
     df1 = df1.ffill().bfill()
     df2 = df2.ffill().bfill()
 
-    # Ensure required location columns exist
     for col in ['country', 'state', 'city']:
         if col not in df1.columns:
             df1[col] = 'Unknown'
         if col not in df2.columns:
             df2[col] = 'Unknown'
 
-    # CO₂ Estimation
     df1['estimated_CO2'] = estimate_co2(df1['PM2.5'], df1['CO'])
     df2['estimated_CO2'] = estimate_co2(df2['PM2.5'], df2['CO'])
 
-    # Add year/month
     for df in [df1, df2]:
         df['year'] = df['timestamp'].dt.year
         df['month'] = df['timestamp'].dt.month
 
-    # Match column order before merging
-    df2 = df2[df1.columns]  # Align columns
+    df2 = df2[df1.columns]
     combined_df = pd.concat([df1, df2], ignore_index=True)
-
     return combined_df
 
 @st.cache_resource
 def train_ensemble_model(df):
-    features = df[['temperature', 'humidity', 'pressure', 'NO2', 'O3', 'CO']]
-    target = df['PM2.5']
+    df = df.copy()
+    df = df[df["PM2.5"] > 0]
+
+    # Feature engineering
+    df['humidity_temp'] = df['humidity'] * df['temperature']
+    df['NO2_O3_ratio'] = df['NO2'] / (df['O3'] + 1)
+
+    features = df[['temperature', 'humidity', 'pressure', 'NO2', 'O3', 'CO', 'month', 'year', 'humidity_temp', 'NO2_O3_ratio']]
+    target = np.log1p(df['PM2.5'])  # Log transform target
 
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
@@ -71,30 +67,29 @@ def train_ensemble_model(df):
         features_scaled, target, test_size=0.2, random_state=42
     )
 
-    rf = RandomForestRegressor(n_estimators=150, random_state=42)
-    xgb = XGBRegressor(n_estimators=100, learning_rate=0.05, max_depth=6,
-                       subsample=0.8, colsample_bytree=0.8, random_state=42)
+    rf = RandomForestRegressor(n_estimators=300, max_depth=15, random_state=42)
+    xgb = XGBRegressor(n_estimators=200, learning_rate=0.03, max_depth=6,
+                       subsample=0.9, colsample_bytree=0.9, random_state=42)
 
     rf.fit(X_train, y_train)
     xgb.fit(X_train, y_train)
 
     rf_pred = rf.predict(X_test)
     xgb_pred = xgb.predict(X_test)
-    ensemble_pred = (rf_pred + xgb_pred) / 2
+    ensemble_pred = 0.4 * rf_pred + 0.6 * xgb_pred  # weighted average
 
-    rmse = np.sqrt(mean_squared_error(y_test, ensemble_pred))
-    r2 = r2_score(y_test, ensemble_pred)
+    rmse = np.sqrt(mean_squared_error(np.expm1(y_test), np.expm1(ensemble_pred)))
+    r2 = r2_score(np.expm1(y_test), np.expm1(ensemble_pred))
 
-    return rf, xgb, scaler, rmse, r2
+    return rf, xgb, scaler, features.columns.tolist(), rmse, r2
 
-# 🧠 Streamlit App
 def main():
     st.set_page_config(page_title="🌐 Air Quality Ensemble Dashboard", layout="wide")
     st.title("🌍 Global Air Quality & CO₂ Intelligence Dashboard")
-    st.markdown("##### Ensemble Model: XGBoost + Random Forest for Better PM2.5 Prediction Accuracy")
+    st.markdown("##### Ensemble Model: XGBoost + Random Forest with Feature Engineering")
 
     df = load_and_merge_data()
-    rf_model, xgb_model, scaler, rmse, r2 = train_ensemble_model(df)
+    rf_model, xgb_model, scaler, feature_names, rmse, r2 = train_ensemble_model(df)
 
     st.sidebar.header("🌐 Select Location")
     country = st.sidebar.selectbox("Country", sorted(df['country'].dropna().unique()))
@@ -137,11 +132,19 @@ def main():
         submitted = st.form_submit_button("Predict")
 
         if submitted:
-            input_data = np.array([[temp, humidity, pressure, no2, o3, co]])
-            scaled_input = scaler.transform(input_data)
+            month = datetime.now().month
+            year = datetime.now().year
+            humidity_temp = humidity * temp
+            no2_o3_ratio = no2 / (o3 + 1)
+
+            input_array = pd.DataFrame([[
+                temp, humidity, pressure, no2, o3, co, month, year, humidity_temp, no2_o3_ratio
+            ]], columns=feature_names)
+
+            scaled_input = scaler.transform(input_array)
             rf_pred = rf_model.predict(scaled_input)[0]
             xgb_pred = xgb_model.predict(scaled_input)[0]
-            pm25_pred = (rf_pred + xgb_pred) / 2
+            pm25_pred = np.expm1(0.4 * rf_pred + 0.6 * xgb_pred)
             co2_pred = estimate_co2(pm25_pred, co)
             color = pm25_color_code(pm25_pred)
 
