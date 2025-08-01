@@ -33,44 +33,51 @@ def load_and_merge_data():
     df1 = pd.read_csv("air_quality_dataset.csv", parse_dates=['timestamp'], dayfirst=True)
     df2 = pd.read_csv("global_air_quality_dataset.csv", parse_dates=['timestamp'])
 
-    df1.fillna(method='ffill', inplace=True)
-    df1.fillna(method='bfill', inplace=True)
-    df2.fillna(method='ffill', inplace=True)
-    df2.fillna(method='bfill', inplace=True)
+    # Clean missing data with updated syntax
+    df1 = df1.ffill().bfill()
+    df2 = df2.ffill().bfill()
 
-    # Add missing columns to df1
+    # Ensure required location columns exist
     for col in ['country', 'state', 'city']:
         if col not in df1.columns:
             df1[col] = 'Unknown'
+        if col not in df2.columns:
+            df2[col] = 'Unknown'
 
+    # CO₂ Estimation
     df1['estimated_CO2'] = estimate_co2(df1['PM2.5'], df1['CO'])
     df2['estimated_CO2'] = estimate_co2(df2['PM2.5'], df2['CO'])
 
-    df1['year'] = df1['timestamp'].dt.year
-    df1['month'] = df1['timestamp'].dt.month
-    df2['year'] = df2['timestamp'].dt.year
-    df2['month'] = df2['timestamp'].dt.month
+    # Add year/month
+    for df in [df1, df2]:
+        df['year'] = df['timestamp'].dt.year
+        df['month'] = df['timestamp'].dt.month
 
+    # Match column order before merging
+    df2 = df2[df1.columns]  # Align columns
     combined_df = pd.concat([df1, df2], ignore_index=True)
+
     return combined_df
 
 @st.cache_resource
 def train_ensemble_model(df):
     features = df[['temperature', 'humidity', 'pressure', 'NO2', 'O3', 'CO']]
     target = df['PM2.5']
+
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
 
-    X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        features_scaled, target, test_size=0.2, random_state=42
+    )
 
     rf = RandomForestRegressor(n_estimators=150, random_state=42)
-    xgb = XGBRegressor(n_estimators=100, learning_rate=0.05, max_depth=6, subsample=0.8,
-                       colsample_bytree=0.8, random_state=42)
+    xgb = XGBRegressor(n_estimators=100, learning_rate=0.05, max_depth=6,
+                       subsample=0.8, colsample_bytree=0.8, random_state=42)
 
     rf.fit(X_train, y_train)
     xgb.fit(X_train, y_train)
 
-    # Ensemble prediction
     rf_pred = rf.predict(X_test)
     xgb_pred = xgb.predict(X_test)
     ensemble_pred = (rf_pred + xgb_pred) / 2
@@ -80,31 +87,35 @@ def train_ensemble_model(df):
 
     return rf, xgb, scaler, rmse, r2
 
-# 🧠 Main Dashboard
+# 🧠 Streamlit App
 def main():
     st.set_page_config(page_title="🌐 Air Quality Ensemble Dashboard", layout="wide")
-    st.title("🌍 Global Air Quality & CO₂ Intelligence Dashboard (XGBoost + RF)")
-    st.markdown("Ensemble Model Combining XGBoost and Random Forest for Improved PM2.5 Prediction")
+    st.title("🌍 Global Air Quality & CO₂ Intelligence Dashboard")
+    st.markdown("##### Ensemble Model: XGBoost + Random Forest for Better PM2.5 Prediction Accuracy")
 
     df = load_and_merge_data()
     rf_model, xgb_model, scaler, rmse, r2 = train_ensemble_model(df)
 
     st.sidebar.header("🌐 Select Location")
-    country = st.sidebar.selectbox("Country", sorted(df['country'].unique()))
-    state = st.sidebar.selectbox("State", sorted(df[df['country'] == country]['state'].unique()))
-    city = st.sidebar.selectbox("City", sorted(df[(df['country'] == country) & (df['state'] == state)]['city'].unique()))
+    country = st.sidebar.selectbox("Country", sorted(df['country'].dropna().unique()))
+    state = st.sidebar.selectbox("State", sorted(df[df['country'] == country]['state'].dropna().unique()))
+    city = st.sidebar.selectbox("City", sorted(df[(df['country'] == country) & (df['state'] == state)]['city'].dropna().unique()))
     filtered_df = df[(df['country'] == country) & (df['state'] == state) & (df['city'] == city)]
 
     st.markdown(f"### 📍 Air Quality in {city}, {state}, {country}")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.plotly_chart(px.line(filtered_df, x='timestamp', y='PM2.5', title='PM2.5 Over Time', markers=True), use_container_width=True)
-    with col2:
-        st.plotly_chart(px.line(filtered_df, x='timestamp', y='estimated_CO2', title='Estimated CO₂ Over Time', markers=True), use_container_width=True)
 
-    st.markdown("### 🌏 Country-wise Annual CO₂ Emissions")
-    summary_df = df.groupby(['country', 'year'])['estimated_CO2'].mean().reset_index()
-    st.plotly_chart(px.bar(summary_df, x='year', y='estimated_CO2', color='country', title='Average CO₂ by Country per Year'), use_container_width=True)
+    if filtered_df.empty:
+        st.warning("⚠️ No data available for this selection.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(px.line(filtered_df, x='timestamp', y='PM2.5', title='PM2.5 Over Time', markers=True), use_container_width=True)
+        with col2:
+            st.plotly_chart(px.line(filtered_df, x='timestamp', y='estimated_CO2', title='Estimated CO₂ Over Time', markers=True), use_container_width=True)
+
+        st.markdown("### 🌏 Country-wise Annual CO₂ Emissions")
+        summary_df = df.groupby(['country', 'year'])['estimated_CO2'].mean().reset_index()
+        st.plotly_chart(px.bar(summary_df, x='year', y='estimated_CO2', color='country', title='Average CO₂ by Country per Year'), use_container_width=True)
 
     st.markdown(f"### 🎯 Model Performance")
     st.metric(label="Ensemble RMSE", value=f"{rmse:.2f}")
