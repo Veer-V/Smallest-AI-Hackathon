@@ -91,6 +91,82 @@ def train_stacked_model(df):
 
 def main():
     st.set_page_config(page_title="🌐 Enhanced Air Quality Dashboard", layout="wide")
+
+    # Inject custom CSS for improved UI
+    st.markdown(
+        """
+        <style>
+        /* General body styles */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f6;
+            color: #333333;
+        }
+        /* Title style */
+        .css-1v3fvcr h1 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+        /* Sidebar header */
+        .css-1d391kg h2 {
+            color: #2980b9;
+            font-weight: 600;
+        }
+        /* Sidebar selectbox */
+        .css-1v3fvcr select {
+            border-radius: 8px;
+            border: 1px solid #2980b9;
+            padding: 0.3rem;
+            font-size: 1rem;
+        }
+        /* Metric styles */
+        .stMetric {
+            background-color: #3498db;
+            color: white;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+        }
+        /* Button style */
+        div.stButton > button {
+            background-color: #2980b9;
+            color: white;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        div.stButton > button:hover {
+            background-color: #1c5980;
+        }
+        /* Form input styles */
+        input[type=number] {
+            border-radius: 6px;
+            border: 1px solid #2980b9;
+            padding: 0.3rem;
+            font-size: 1rem;
+            width: 100%;
+        }
+        /* Plotly chart container */
+        .js-plotly-plot {
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background-color: white;
+            padding: 1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.title("🌍 🌍 Global Air Quality & CO₂ Intelligence Dashboard (XGBoost + RF)")
     st.markdown("Now with interaction features and smarter stacking using Ridge regression.")
 
