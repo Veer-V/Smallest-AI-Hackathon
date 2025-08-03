@@ -64,8 +64,7 @@ def train_ensemble_model(df):
     X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
 
     rf = RandomForestRegressor(n_estimators=300, max_depth=15, random_state=42)
-    xgb = XGBRegressor(n_estimators=200, learning_rate=0.03, max_depth=6,
-                       subsample=0.9, colsample_bytree=0.9, random_state=42)
+    xgb = XGBRegressor(n_estimators=200, learning_rate=0.03, max_depth=6, subsample=0.9, colsample_bytree=0.9, random_state=42)
 
     rf.fit(X_train, y_train)
     xgb.fit(X_train, y_train)
@@ -114,73 +113,59 @@ def main():
             'Type': ['CO₂', 'Oxygen (via O₃)'],
             'Value': [pie_data['estimated_CO2'], pie_data['O3']]
         })
-
-        fig = px.pie(pie_df, values='Value', names='Type', 
+        fig = px.pie(pie_df, values='Value', names='Type',
                      title=f"Air Composition in {city}, {state}, {country}",
-                     color_discrete_map={'CO₂':'red', 'Oxygen (via O₃)':'green'})
+                     color_discrete_map={'CO₂': 'red', 'Oxygen (via O₃)': 'green'})
         st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("### 🧾 Air Quality Rating by Location")
         def get_aqi_label(pm25):
-            if pm25 <= 50:
-                return "Good"
-            elif pm25 <= 100:
-                return "Moderate"
-            elif pm25 <= 150:
-                return "Unhealthy for Sensitive Groups"
-            elif pm25 <= 200:
-                return "Unhealthy"
-            elif pm25 <= 300:
-                return "Very Unhealthy"
-            else:
-                return "Hazardous"
+            if pm25 <= 50: return "Good"
+            elif pm25 <= 100: return "Moderate"
+            elif pm25 <= 150: return "Unhealthy for Sensitive Groups"
+            elif pm25 <= 200: return "Unhealthy"
+            elif pm25 <= 300: return "Very Unhealthy"
+            else: return "Hazardous"
 
+        st.markdown("### 🧾 Air Quality Rating by Location")
         filtered_df['AQI Category'] = filtered_df['PM2.5'].apply(get_aqi_label)
         aqi_summary = filtered_df['AQI Category'].value_counts().reset_index()
         aqi_summary.columns = ['AQI Level', 'Count']
-
-        fig_bar = px.bar(
-            aqi_summary,
-            x='AQI Level',
-            y='Count',
-            color='AQI Level',
-            title=f"Air Quality Levels in {city}, {state}, {country}",
-            color_discrete_map={
-                "Good": "green",
-                "Moderate": "yellow",
-                "Unhealthy for Sensitive Groups": "orange",
-                "Unhealthy": "red",
-                "Very Unhealthy": "purple",
-                "Hazardous": "maroon"
-            }
-        )
+        fig_bar = px.bar(aqi_summary, x='AQI Level', y='Count', color='AQI Level',
+                         color_discrete_map={
+                             "Good": "green", "Moderate": "yellow", "Unhealthy for Sensitive Groups": "orange",
+                             "Unhealthy": "red", "Very Unhealthy": "purple", "Hazardous": "maroon"
+                         },
+                         title=f"Air Quality Levels in {city}, {state}, {country}")
         st.plotly_chart(fig_bar, use_container_width=True)
 
         st.markdown(f"### 🗺️ AQI Distribution per City in {country}")
         country_df = df[df['country'] == country].copy()
         country_df['AQI Category'] = country_df['PM2.5'].apply(get_aqi_label)
         city_aqi_counts = country_df.groupby(['city', 'AQI Category']).size().reset_index(name='Count')
-
-        fig_country_aqi = px.bar(
-            city_aqi_counts,
-            x="city",
-            y="Count",
-            color="AQI Category",
-            title=f"AQI Distribution per City in {country}",
-            labels={'Count': 'Data Points'},
-            barmode='group',
-            color_discrete_map={
-                "Good": "green",
-                "Moderate": "yellow",
-                "Unhealthy for Sensitive Groups": "orange",
-                "Unhealthy": "red",
-                "Very Unhealthy": "purple",
-                "Hazardous": "maroon"
-            }
-        )
+        fig_country_aqi = px.bar(city_aqi_counts, x="city", y="Count", color="AQI Category",
+                                 title=f"AQI Distribution per City in {country}", barmode='group',
+                                 color_discrete_map={
+                                     "Good": "green", "Moderate": "yellow", "Unhealthy for Sensitive Groups": "orange",
+                                     "Unhealthy": "red", "Very Unhealthy": "purple", "Hazardous": "maroon"
+                                 })
         st.plotly_chart(fig_country_aqi, use_container_width=True)
 
-    st.markdown(f"### 🎯 Model Performance")
+        # 🌐 Global Maps
+        st.markdown("### 🌍 Global PM2.5 Air Quality Map")
+        country_pm25 = df.groupby('country')['PM2.5'].mean().reset_index()
+        fig_pm25_map = px.choropleth(country_pm25, locations='country', locationmode='country names',
+                                     color='PM2.5', color_continuous_scale='YlOrRd',
+                                     title='Average PM2.5 Levels by Country')
+        st.plotly_chart(fig_pm25_map, use_container_width=True)
+
+        st.markdown("### 🌍 Global Estimated CO₂ Emission Map")
+        country_co2 = df.groupby('country')['estimated_CO2'].mean().reset_index()
+        fig_co2_map = px.choropleth(country_co2, locations='country', locationmode='country names',
+                                    color='estimated_CO2', color_continuous_scale='Plasma',
+                                    title='Average Estimated CO₂ Emission by Country')
+        st.plotly_chart(fig_co2_map, use_container_width=True)
+
+    st.markdown("### 🎯 Model Performance")
     st.metric(label="Ensemble RMSE", value=f"{rmse:.2f}")
     st.metric(label="Ensemble R² Score", value=f"{r2:.4f}")
 
@@ -198,7 +183,6 @@ def main():
             co = st.number_input("CO (ppm)", value=1.0)
 
         submitted = st.form_submit_button("Predict")
-
         if submitted:
             month = datetime.now().month
             year = datetime.now().year
@@ -207,7 +191,6 @@ def main():
 
             input_array = pd.DataFrame([[temp, humidity, pressure, no2, o3, co, month, year, humidity_temp, no2_o3_ratio]],
                                        columns=feature_names)
-
             scaled_input = scaler.transform(input_array)
             rf_pred = rf_model.predict(scaled_input)[0]
             xgb_pred = xgb_model.predict(scaled_input)[0]
